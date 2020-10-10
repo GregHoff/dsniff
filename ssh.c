@@ -16,12 +16,14 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
+#include <openssl/md5.h>
 
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 
 #include "hex.h"
@@ -232,7 +234,10 @@ SSH_accept(SSH *ssh)
 	u_char *p, cipher, cookie[8], msg[1024];
 	u_int32_t num;
 	int i;
-	
+    
+	const BIGNUM *servkey_e, *servkey_n;
+	const BIGNUM *hostkey_e, *hostkey_n;
+
 	/* Generate anti-spoofing cookie. */
 	RAND_bytes(cookie, sizeof(cookie));
 	
@@ -241,11 +246,13 @@ SSH_accept(SSH *ssh)
 	*p++ = SSH_SMSG_PUBLIC_KEY;			/* type */
 	memcpy(p, cookie, 8); p += 8;			/* cookie */
 	num = 768; PUTLONG(num, p);			/* servkey bits */
-	put_bn(ssh->ctx->servkey->e, &p);		/* servkey exponent */
-	put_bn(ssh->ctx->servkey->n, &p);		/* servkey modulus */
+	RSA_get0_key(ssh->ctx->servkey, &servkey_n, &servkey_e, NULL);
+	put_bn(servkey_e, &p);		/* servkey exponent */
+	put_bn(servkey_n, &p);		/* servkey modulus */
 	num = 1024; PUTLONG(num, p);			/* hostkey bits */
-	put_bn(ssh->ctx->hostkey->e, &p);		/* hostkey exponent */
-	put_bn(ssh->ctx->hostkey->n, &p);		/* hostkey modulus */
+	RSA_get0_key(ssh->ctx->hostkey, &hostkey_n, &hostkey_e, NULL);
+	put_bn(hostkey_e, &p);		/* hostkey exponent */
+	put_bn(hostkey_n, &p);		/* hostkey modulus */
 	num = 0; PUTLONG(num, p);			/* protocol flags */
 	num = ssh->ctx->encmask; PUTLONG(num, p);	/* ciphers */
 	num = ssh->ctx->authmask; PUTLONG(num, p);	/* authmask */
@@ -296,7 +303,7 @@ SSH_accept(SSH *ssh)
 	SKIP(p, i, 4);
 
 	/* Decrypt session key. */
-	if (BN_cmp(ssh->ctx->servkey->n, ssh->ctx->hostkey->n) > 0) {
+	if (BN_cmp(servkey_n, hostkey_n) > 0) {
 		rsa_private_decrypt(enckey, enckey, ssh->ctx->servkey);
 		rsa_private_decrypt(enckey, enckey, ssh->ctx->hostkey);
 	}
@@ -316,8 +323,8 @@ SSH_accept(SSH *ssh)
 	BN_clear_free(enckey);
 	
 	/* Derive real session key using session id. */
-	if ((p = ssh_session_id(cookie, ssh->ctx->hostkey->n,
-				ssh->ctx->servkey->n)) == NULL) {
+	if ((p = ssh_session_id(cookie, hostkey_n,
+				servkey_n)) == NULL) {
 		warn("ssh_session_id");
 		return (-1);
 	}
@@ -326,10 +333,8 @@ SSH_accept(SSH *ssh)
 	}
 	/* Set cipher. */
 	if (cipher == SSH_CIPHER_3DES) {
-		ssh->estate = des3_init(ssh->sesskey, sizeof(ssh->sesskey));
-		ssh->dstate = des3_init(ssh->sesskey, sizeof(ssh->sesskey));
-		ssh->encrypt = des3_encrypt;
-		ssh->decrypt = des3_decrypt;
+		warnx("cipher 3des no longer supported");
+		return (-1);
 	}
 	else if (cipher == SSH_CIPHER_BLOWFISH) {
 		ssh->estate = blowfish_init(ssh->sesskey,sizeof(ssh->sesskey));
@@ -355,7 +360,10 @@ SSH_connect(SSH *ssh)
 	u_char *p, cipher, cookie[8], msg[1024];
 	u_int32_t num;
 	int i;
-	
+
+	BIGNUM *servkey_n, *servkey_e;
+	BIGNUM *hostkey_n, *hostkey_e;
+
 	/* Get public key. */
 	if ((i = SSH_recv(ssh, pkt, sizeof(pkt))) <= 0) {
 		warn("SSH_recv");
@@ -377,21 +385,23 @@ SSH_connect(SSH *ssh)
 
 	/* Get servkey. */
 	ssh->ctx->servkey = RSA_new();
-	ssh->ctx->servkey->n = BN_new();
-	ssh->ctx->servkey->e = BN_new();
+	servkey_n = BN_new();
+	servkey_e = BN_new();
+	RSA_set0_key(ssh->ctx->servkey, servkey_n, servkey_e, NULL);
 
 	SKIP(p, i, 4);
-	get_bn(ssh->ctx->servkey->e, &p, &i);
-	get_bn(ssh->ctx->servkey->n, &p, &i);
+	get_bn(servkey_e, &p, &i);
+	get_bn(servkey_n, &p, &i);
 
 	/* Get hostkey. */
 	ssh->ctx->hostkey = RSA_new();
-	ssh->ctx->hostkey->n = BN_new();
-	ssh->ctx->hostkey->e = BN_new();
+	hostkey_n = BN_new();
+	hostkey_e = BN_new();
+	RSA_set0_key(ssh->ctx->hostkey, hostkey_n, hostkey_e, NULL);
 
 	SKIP(p, i, 4);
-	get_bn(ssh->ctx->hostkey->e, &p, &i);
-	get_bn(ssh->ctx->hostkey->n, &p, &i);
+	get_bn(hostkey_e, &p, &i);
+	get_bn(hostkey_n, &p, &i);
 
 	/* Get cipher, auth masks. */
 	SKIP(p, i, 4);
@@ -403,8 +413,8 @@ SSH_connect(SSH *ssh)
 	RAND_bytes(ssh->sesskey, sizeof(ssh->sesskey));
 
 	/* Obfuscate with session id. */
-	if ((p = ssh_session_id(cookie, ssh->ctx->hostkey->n,
-				ssh->ctx->servkey->n)) == NULL) {
+	if ((p = ssh_session_id(cookie, hostkey_n,
+				servkey_n)) == NULL) {
 		warn("ssh_session_id");
 		return (-1);
 	}
@@ -420,7 +430,7 @@ SSH_connect(SSH *ssh)
 		else BN_add_word(bn, ssh->sesskey[i]);
 	}
 	/* Encrypt session key. */
-	if (BN_cmp(ssh->ctx->servkey->n, ssh->ctx->hostkey->n) < 0) {
+	if (BN_cmp(servkey_n, hostkey_n) < 0) {
 		rsa_public_encrypt(bn, bn, ssh->ctx->servkey);
 		rsa_public_encrypt(bn, bn, ssh->ctx->hostkey);
 	}
@@ -468,10 +478,8 @@ SSH_connect(SSH *ssh)
 		ssh->decrypt = blowfish_decrypt;
 	}
 	else if (cipher == SSH_CIPHER_3DES) {
-		ssh->estate = des3_init(ssh->sesskey, sizeof(ssh->sesskey));
-		ssh->dstate = des3_init(ssh->sesskey, sizeof(ssh->sesskey));
-		ssh->encrypt = des3_encrypt;
-		ssh->decrypt = des3_decrypt;
+		warnx("cipher 3des no longer supported");
+		return (-1);
 	}
 	/* Get server response. */
 	if ((i = SSH_recv(ssh, pkt, sizeof(pkt))) <= 0) {

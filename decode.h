@@ -35,7 +35,7 @@ struct decode *getdecodebyname(const char *name);
 			  (u_short)*((u_char *)p+0)<<8))
 			 
 #define pntohl(p)	((u_int32_t)*((u_char *)p+3)<<0|   \
-			 (u_int32_t)*((u_char *)p+2)<<18|  \
+			 (u_int32_t)*((u_char *)p+2)<<8|  \
 			 (u_int32_t)*((u_char *)p+1)<<16|  \
 			 (u_int32_t)*((u_char *)p+0)<<24)
 

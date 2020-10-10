@@ -59,7 +59,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "Version: " VERSION "\n"
-		"Usage: mailsnarf [-i interface] [[-v] pattern [expression]]\n");
+		"Usage: mailsnarf [-i interface | -p pcapfile] [[-v] pattern [expression]]\n");
 	exit(1);
 }
 
@@ -178,7 +178,7 @@ process_smtp_client(struct smtp_info *smtp, char *data, int len)
 	if (smtp->state != SMTP_DATA) {
 		while ((i = buf_index(&buf, "\r\n", 2)) >= 0) {
 			line = buf_tok(&buf, NULL, i + 2);
-			line->base[line->end] = '\0';
+			line->base[line->end-1] = '\0';
 			p = buf_ptr(line);
 			
 			if (strncasecmp(p, "RSET", 4) == 0) {
@@ -344,11 +344,14 @@ main(int argc, char *argv[])
 	extern int optind;
 	int c;
 	
-	while ((c = getopt(argc, argv, "i:vh?V")) != -1) {
+	while ((c = getopt(argc, argv, "i:p:vh?V")) != -1) {
 		switch (c) {
 		case 'i':
 			nids_params.device = optarg;
 			break;
+                case 'p':
+                        nids_params.filename = optarg;
+                        break;
 		case 'v':
 			Opt_invert = 1;
 			break;
@@ -378,10 +381,23 @@ main(int argc, char *argv[])
 	nids_register_tcp(sniff_pop_session);
 
 	if (nids_params.pcap_filter != NULL) {
-		warnx("listening on %s [%s]", nids_params.device,
-		      nids_params.pcap_filter);
+                if (nids_params.filename == NULL) {
+		        warnx("listening on %s [%s]", nids_params.device,
+		              nids_params.pcap_filter);
+                }
+                else {
+		        warnx("using %s [%s]", nids_params.filename,
+		              nids_params.pcap_filter);
+                }
 	}
-	else warnx("listening on %s", nids_params.device);
+	else {
+                if (nids_params.filename == NULL) {
+                    warnx("listening on %s", nids_params.device);
+                }
+                else {
+                    warnx("using %s", nids_params.filename);
+                }
+        }
 	
 	nids_run();
 	

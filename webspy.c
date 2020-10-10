@@ -33,6 +33,7 @@
 extern int mozilla_remote_commands (Display *, Window, char **);
 char	*expected_mozilla_version = "4.7";
 char	*progname = "webspy";
+static	libnet_t *l;
 
 Display		*dpy;
 char		 cmd[2048], *cmdtab[2];
@@ -42,7 +43,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "Version: " VERSION "\n"
-		"Usage: %s [-i interface] host\n", progname);
+		"Usage: %s [-i interface | -p pcapfile] host\n", progname);
 	exit(1);
 }
 
@@ -126,7 +127,7 @@ process_http_request(struct tuple4 *addr, u_char *data, int len)
 		if (auth == NULL)
 			auth = "";
 		if (vhost == NULL)
-			vhost = libnet_host_lookup(addr->daddr, 0);
+			vhost = libnet_addr2name4(addr->daddr, 0);
 		
 		snprintf(cmd, sizeof(cmd), "openURL(http://%s%s%s%s)",
 			 auth, *auth ? "@" : "", vhost, uri);
@@ -183,11 +184,15 @@ main(int argc, char *argv[])
 	extern char *optarg;
 	extern int optind;
 	int c;
+	char libnet_ebuf[LIBNET_ERRBUF_SIZE];
 	
-	while ((c = getopt(argc, argv, "i:h?V")) != -1) {
+	while ((c = getopt(argc, argv, "i:p:h?V")) != -1) {
 		switch (c) {
 		case 'i':
 			nids_params.device = optarg;
+			break;
+		case 'p':
+			nids_params.filename = optarg;
 			break;
 		default:
 			usage();
@@ -202,7 +207,10 @@ main(int argc, char *argv[])
 	cmdtab[0] = cmd;
 	cmdtab[1] = NULL;
 	
-	if ((host = libnet_name_resolve(argv[0], 1)) == -1)
+	if ((l = libnet_init(LIBNET_LINK, NULL, libnet_ebuf)) == NULL)
+		errx(1, "%s", libnet_ebuf);
+	
+	if ((host = libnet_name2addr4(l, argv[0], LIBNET_RESOLVE)) == -1)
 		errx(1, "unknown host");
 	
 	if ((dpy = XOpenDisplay(NULL)) == NULL)
@@ -216,7 +224,13 @@ main(int argc, char *argv[])
 	
 	nids_register_tcp(sniff_http_client);
 
-	warnx("listening on %s", nids_params.device);
+        if (nids_params.filename == NULL) {
+                warnx("listening on %s", nids_params.device);
+        }
+        else {
+                warnx("using %s", nids_params.filename);
+        }
+
 
 	nids_run();
 	

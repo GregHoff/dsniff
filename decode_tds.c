@@ -18,6 +18,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strlcat.h>
+#include <arpa/inet.h>
 
 #include "decode.h"
 
@@ -142,6 +144,11 @@ decode_tds(u_char *buf, int len, u_char *obuf, int olen)
 	     len > sizeof(*th) && len >= ntohs(th->size);
 	     buf += ntohs(th->size), len -= ntohs(th->size)) {
 		
+		if (th->size != 8) {
+			/* wrong header length */
+			break;
+		}
+
 		if (th->type == 2) {
 			/* Version 4.x, 5.0 */
 			if (len < sizeof(*th) + sizeof(*tl))

@@ -652,7 +652,7 @@ main (int argc, char **argv)
 	  if (remote_command_count > 0)
 	    {
 	      fprintf (stderr,
-		"%s: the `-id' option must preceed all `-remote' options.\n",
+		"%s: the `-id' option must precede all `-remote' options.\n",
 		       progname);
 	      usage ();
 	      exit (-1);

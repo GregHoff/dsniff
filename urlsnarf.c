@@ -36,12 +36,13 @@
 u_short		Opt_dns = 1;
 int		Opt_invert = 0;
 regex_t	       *pregex = NULL;
+time_t          tt = 0;
 
 static void
 usage(void)
 {
 	fprintf(stderr, "Version: " VERSION "\n"
-		"Usage: urlsnarf [-n] [-i interface] [[-v] pattern [expression]]\n");
+		"Usage: urlsnarf [-n] [-i interface | -p pcapfile] [[-v] pattern [expression]]\n");
 	exit(1);
 }
 
@@ -57,8 +58,11 @@ timestamp(void)
 {
 	static char tstr[32], sign;
 	struct tm *t, gmt;
-	time_t tt = time(NULL);
 	int days, hours, tz, len;
+	
+	if (!nids_params.filename) {
+		tt = time(NULL);
+	}
 	
 	gmt = *gmtime(&tt);
 	t = localtime(&tt);
@@ -68,7 +72,7 @@ timestamp(void)
 		 t->tm_hour - gmt.tm_hour);
 	tz = hours * 60 + t->tm_min - gmt.tm_min;
 	
-	len = strftime(tstr, sizeof(tstr), "%e/%b/%Y:%X", t);
+	len = strftime(tstr, sizeof(tstr), "%d/%b/%Y:%X", t);
 	if (len < 0 || len > sizeof(tstr) - 5)
 		return (NULL);
 	
@@ -82,6 +86,43 @@ timestamp(void)
 		 sign, tz / 60, tz % 60);
 	
 	return (tstr);
+}
+
+static char *
+escape_log_entry(char *string)
+{
+	char *out;
+	unsigned char *c, *o;
+	size_t len;
+
+	if (!string)
+		return NULL;
+
+	/* Determine needed length */
+	for (c = string, len = 0; *c; c++) {
+		if ((*c < 32) || (*c >= 128))
+			len += 4;
+		else if ((*c == '"') || (*c =='\\'))
+			len += 2;
+		else
+			len++;
+	}
+	out = malloc(len+1);
+	if (!out)
+		return NULL;
+	for (c = string, o = out; *c; c++, o++) {
+		if ((*c < 32) || (*c >= 128)) {
+			snprintf(o, 5, "\\x%02x", *c);
+			o += 3;
+		} else if ((*c == '"') || ((*c =='\\'))) {
+			*(o++) = '\\';
+			*o = *c;
+		} else {
+			*o = *c;
+		}
+	}
+	out[len]='\0';
+	return out;
 }
 
 static int
@@ -142,18 +183,26 @@ process_http_request(struct tuple4 *addr, u_char *data, int len)
 				buf_tok(NULL, NULL, i);
 			}
 		}
-		if (user == NULL)
-			user = "-";
-		if (vhost == NULL)
-			vhost = libnet_host_lookup(addr->daddr, Opt_dns);
-		if (referer == NULL)
-			referer = "-";
-		if (agent == NULL)
-			agent = "-";
-		
+		user = escape_log_entry(user);
+		vhost = escape_log_entry(vhost);
+		uri = escape_log_entry(uri);
+		referer = escape_log_entry(referer);
+		agent = escape_log_entry(agent);
+
 		printf("%s - %s [%s] \"%s http://%s%s\" - - \"%s\" \"%s\"\n",
-		       libnet_host_lookup(addr->saddr, Opt_dns),
-		       user, timestamp(), req, vhost, uri, referer, agent);
+		       libnet_addr2name4(addr->saddr, Opt_dns),
+		       (user?user:"-"),
+		       timestamp(), req, 
+		       (vhost?vhost:libnet_addr2name4(addr->daddr, Opt_dns)), 
+		       uri,
+		       (referer?referer:"-"),
+		       (agent?agent:"-"));
+
+		free(user);
+		free(vhost);
+		free(uri);
+		free(referer);
+		free(agent);
 	}
 	fflush(stdout);
 	
@@ -200,11 +249,15 @@ main(int argc, char *argv[])
 	extern char *optarg;
 	extern int optind;
 	int c;
+	struct nids_chksum_ctl chksum_ctl;
 	
-	while ((c = getopt(argc, argv, "i:nvh?V")) != -1) {
+	while ((c = getopt(argc, argv, "i:p:nvh?V")) != -1) {
 		switch (c) {
 		case 'i':
 			nids_params.device = optarg;
+			break;
+		case 'p':
+			nids_params.filename = optarg;
 			break;
 		case 'n':
 			Opt_dns = 0;
@@ -238,12 +291,73 @@ main(int argc, char *argv[])
 	
 	nids_register_tcp(sniff_http_client);
 
-	warnx("listening on %s [%s]", nids_params.device,
-	      nids_params.pcap_filter);
+        if (nids_params.pcap_filter != NULL) {
+                if (nids_params.filename == NULL) {
+                        warnx("listening on %s [%s]", nids_params.device,
+                              nids_params.pcap_filter);
+                }
+                else {
+                        warnx("using %s [%s]", nids_params.filename,
+                              nids_params.pcap_filter);
+                }
+        }
+        else {
+                if (nids_params.filename == NULL) {
+                    warnx("listening on %s", nids_params.device);
+                }
+                else {
+                    warnx("using %s", nids_params.filename);
+                }
+        }
 
-	nids_run();
-	
-	/* NOTREACHED */
+        chksum_ctl.netaddr = 0;
+        chksum_ctl.mask = 0;
+        chksum_ctl.action = NIDS_DONT_CHKSUM;
+
+        nids_register_chksum_ctl(&chksum_ctl, 1);
+
+	pcap_t *p;
+	char pcap_errbuf[PCAP_ERRBUF_SIZE];
+	if (nids_params.filename == NULL) {
+		/* adapted from libnids.c:open_live() */
+		if (strcmp(nids_params.device, "all") == 0)
+			nids_params.device = "any";
+		p = pcap_open_live(nids_params.device, 16384, 
+				   (nids_params.promisc != 0),
+				   0, pcap_errbuf);
+		if (!p) {
+			fprintf(stderr, "pcap_open_live(): %s\n",
+				pcap_errbuf);
+			exit(1);
+		}
+	}
+	else {
+		p = pcap_open_offline(nids_params.filename, 
+				      pcap_errbuf);
+		if (!p) {
+			fprintf(stderr, "pcap_open_offline(%s): %s\n",
+				nids_params.filename, pcap_errbuf);
+		}
+	}
+
+	struct pcap_pkthdr *h;
+	u_char *d;
+	int rc;
+	while ((rc = pcap_next_ex(p, &h, &d)) == 1) {
+		tt = h->ts.tv_sec;
+		nids_pcap_handler(NULL, h, d);
+	}
+	switch (rc) {
+	case(-2): /* end of pcap file */
+	case(0):  /* timeout on live capture */
+		break;
+	case(-1):
+	default:
+		fprintf(stderr, "rc = %i\n", rc);
+		pcap_perror(p, "pcap_read_ex()");
+		exit(1);
+		break;
+	}
 	
 	exit(0);
 }

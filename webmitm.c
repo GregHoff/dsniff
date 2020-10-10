@@ -47,6 +47,8 @@ struct	 sockaddr_in csin, ssin;
 int	 do_ssl, sig_pipe[2];
 in_addr_t	static_host = 0;
 
+static	 libnet_t *l;
+
 extern int decode_http(char *, int, char *, int);
 
 static void
@@ -242,7 +244,7 @@ server_init(char *buf, int size)
 			word = buf_tok(&msg, "/", 1);
 			vhost = buf_strdup(word);
 		}
-		ssin.sin_addr.s_addr = libnet_name_resolve(vhost, 1);
+		ssin.sin_addr.s_addr = libnet_name2addr4(l, vhost, LIBNET_RESOLVE);
 		free(vhost);
 		
 		if (ssin.sin_addr.s_addr == ntohl(INADDR_LOOPBACK) ||
@@ -496,6 +498,7 @@ main(int argc, char *argv[])
 	extern char *optarg;
 	extern int optind;
 	int c;
+	char libnet_ebuf[LIBNET_ERRBUF_SIZE];
 
 	while ((c = getopt(argc, argv, "dh?V")) != -1) {
 		switch (c) {
@@ -509,8 +512,11 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+	if ((l = libnet_init(LIBNET_LINK, NULL, libnet_ebuf)) == NULL)
+		errx(1, "%s", libnet_ebuf);
+	
 	if (argc == 1) {
-		if ((static_host = libnet_name_resolve(argv[0], 1)) == -1)
+		if ((static_host = libnet_name2addr4(l, argv[0], LIBNET_RESOLVE)) == -1)
 			usage();
 	}
 	else if (argc != 0) usage();

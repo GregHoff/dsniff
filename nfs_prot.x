@@ -190,7 +190,7 @@ const NFS3_WRITEVERFSIZE  = 8;
 /*
  * Basic data types
  */
-typedef u_int64_t	uint64;
+typedef uint64_t	uint64;
 typedef int64_t		int64;
 typedef unsigned int	uint32;
 typedef int		int32;

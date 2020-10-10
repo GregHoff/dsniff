@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <strlcat.h>
 
 #include "buf.h"
 #include "record.h"
@@ -43,6 +44,8 @@ SSH_CTX	*ssh_client_ctx, *ssh_server_ctx;
 SSH	*ssh_client, *ssh_server;
 struct	 sockaddr_in csin, ssin;
 int	 sig_pipe[2];
+
+static	 libnet_t *l;
 
 static void
 usage(void)
@@ -363,6 +366,7 @@ main(int argc, char *argv[])
 	u_long ip;
 	u_short lport, rport;
 	int c;
+	char libnet_ebuf[LIBNET_ERRBUF_SIZE];
 
 	lport = rport = 22;
 
@@ -389,10 +393,13 @@ main(int argc, char *argv[])
 	if (argc < 1)
 		usage();
 	
-	if ((ip = libnet_name_resolve(argv[0], 1)) == -1)
-		usage();
-
 	if (argc == 2 && (rport = atoi(argv[1])) == 0)
+		usage();
+	
+	if ((l = libnet_init(LIBNET_LINK, NULL, libnet_ebuf)) == NULL)
+		errx(1, "%s", libnet_ebuf);
+	
+	if ((ip = libnet_name2addr4(l, argv[0], LIBNET_RESOLVE)) == -1)
 		usage();
 	
 	record_init(NULL);

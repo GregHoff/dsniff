@@ -51,32 +51,8 @@ static void
 usage(void)
 {
 	fprintf(stderr, "Version: " VERSION "\n"
-		"Usage: filesnarf [-i interface] [[-v] pattern [expression]]\n");
+		"Usage: filesnarf [-i interface | -p pcapfile] [[-v] pattern [expression]]\n");
 	exit(1);
-}
-
-/* XXX - for nfs_prot_xdr.c */
-bool_t
-xdr_u_int64_t(XDR *xdrs, u_int64_t *nump)
-{
-	int i = 1;
-	u_char *p = (u_char *)nump;
-
-	if (*(char *)&i == 1) {		/* endian haack. */
-		if (xdr_u_long(xdrs, (u_long *)(p + 4)))
-			return (xdr_u_long(xdrs, (u_long *)p));
-	}
-	else {
-		if (xdr_u_long(xdrs, (u_long *)p))
-			return (xdr_u_long(xdrs, (u_long *)(p + 4)));
-	}
-	return (FALSE);
-}
-
-bool_t
-xdr_int64_t(XDR *xdrs, int64_t *nump)
-{
-	return (xdr_u_int64_t(xdrs, (u_int64_t *)nump));
 }
 
 static void
@@ -134,8 +110,8 @@ nfs_save(struct tuple4 *addr, struct myreadargs *ma, u_char *buf, int len)
 	int fd;
 
 	warnx("%s.%d > %s.%d: %s (%d@%d)",
-	      libnet_host_lookup(addr->daddr, 0), addr->dest,
-	      libnet_host_lookup(addr->saddr, 0), addr->source,
+	      libnet_addr2name4(addr->daddr, LIBNET_DONT_RESOLVE), addr->dest,
+	      libnet_addr2name4(addr->saddr, LIBNET_DONT_RESOLVE), addr->source,
 	      ma->filename, len, ma->offset);
 	
 	if ((fd = open(ma->filename, O_WRONLY|O_CREAT, 0644)) >= 0) {
@@ -353,7 +329,7 @@ decode_nfs(struct tuple4 *addr, u_char *buf, int len)
 }
 
 static void
-decode_udp_nfs(struct libnet_ip_hdr *ip)
+decode_udp_nfs(struct libnet_ipv4_hdr *ip)
 {
 	static struct tuple4 addr;
 	struct libnet_udp_hdr *udp;
@@ -464,10 +440,13 @@ main(int argc, char *argv[])
 	extern int optind;
 	int c;
 
-	while ((c = getopt(argc, argv, "i:vh?V")) != -1) {
+	while ((c = getopt(argc, argv, "i:p:vh?V")) != -1) {
 		switch (c) {
 		case 'i':
 			nids_params.device = optarg;
+			break;
+		case 'p':
+			nids_params.filename = optarg;
 			break;
 		case 'v':
 			Opt_invert = 1;
@@ -498,11 +477,24 @@ main(int argc, char *argv[])
 	nids_register_ip(decode_udp_nfs);
 	nids_register_tcp(decode_tcp_nfs);
 
-	if (nids_params.pcap_filter != NULL) {
-		warnx("listening on %s [%s]", nids_params.device,
-		      nids_params.pcap_filter);
-	}
-	else warnx("listening on %s", nids_params.device);
+        if (nids_params.pcap_filter != NULL) {
+                if (nids_params.filename == NULL) {
+                        warnx("listening on %s [%s]", nids_params.device,
+                              nids_params.pcap_filter);
+                }
+                else {
+                        warnx("using %s [%s]", nids_params.filename,
+                              nids_params.pcap_filter);
+                }
+        }
+        else {
+                if (nids_params.filename == NULL) {
+                        warnx("listening on %s", nids_params.device);
+                }
+                else {
+                        warnx("using %s", nids_params.filename);
+                }
+        }
 
 	nids_run();
 

@@ -125,6 +125,9 @@ rpc_decode(u_char *buf, int len, struct rpc_msg *msg)
 			return (0);
 		}
 	}
+	else
+		return (0);
+	
 	stat = xdr_getpos(&xdrs);
 	xdr_destroy(&xdrs);
 	

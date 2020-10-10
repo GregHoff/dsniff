@@ -15,6 +15,7 @@
 
 #include <sys/types.h>
 #include <sys/times.h>
+#include <time.h>
 
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -81,7 +82,7 @@ static clock_t now;
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: sshow [-d] [-i interface]\n");
+	fprintf(stderr, "Usage: sshow [-d] [-i interface | -p pcapfile]\n");
 	exit(1);
 }
 
@@ -216,13 +217,16 @@ client_to_server(struct tcp_stream *ts, struct session *session,
 {
 	clock_t delay;
 	int payload;
+#if defined(_SC_CLK_TCK)
+	long CLK_TCK = sysconf(_SC_CLK_TCK);
+#endif
 
 	delay = add_history(session, 0, cipher_size, plain_range);
 
 	if (debug)
 		printf("- %s -> %s: DATA (%s bytes, %.2f seconds)\n",
 			s_saddr(ts), s_daddr(ts), s_range(plain_range),
-			(float)delay / CLK_TCK);
+			(float)delay / CLOCKS_PER_SEC);
 	if (debug > 1)
 		print_data(&ts->server, cipher_size);
 
@@ -264,13 +268,16 @@ server_to_client(struct tcp_stream *ts, struct session *session,
 	clock_t delay;
 	int skip;
 	range string_range;
+#if defined(_SC_CLK_TCK)
+	long CLK_TCK = sysconf(_SC_CLK_TCK);
+#endif
 	
 	delay = add_history(session, 1, cipher_size, plain_range);
 	
 	if (debug)
 		printf("- %s <- %s: DATA (%s bytes, %.2f seconds)\n",
 		       s_saddr(ts), s_daddr(ts), s_range(plain_range),
-		       (float)delay / CLK_TCK);
+		       (float)delay / CLOCKS_PER_SEC);
 	if (debug > 1)
 		print_data(&ts->client, cipher_size);
 	
@@ -299,7 +306,7 @@ server_to_client(struct tcp_stream *ts, struct session *session,
 	
 	if (session->state == 1 &&
 #ifdef USE_TIMING
-	    now - get_history(session, 2)->timestamp >= CLK_TCK &&
+	    now - get_history(session, 2)->timestamp >= CLOCKS_PER_SEC &&
 #endif
 	    session->protocol == 1 &&
 	    (session->history.directions & 7) == 5 &&
@@ -615,13 +622,16 @@ main(int argc, char *argv[])
 	extern int optind;
 	int c;
 	
-	while ((c = getopt(argc, argv, "di:h?")) != -1) {
+	while ((c = getopt(argc, argv, "di:p:h?")) != -1) {
 		switch (c) {
 		case 'd':
 			debug++;
 			break;
 		case 'i':
 			nids_params.device = optarg;
+			break;
+		case 'p':
+			nids_params.filename = optarg;
 			break;
 		default:
 			usage();
@@ -651,11 +661,24 @@ main(int argc, char *argv[])
 	
 	nids_register_tcp(process_event);
 
-	if (nids_params.pcap_filter != NULL) {
-		warnx("listening on %s [%s]", nids_params.device,
-		      nids_params.pcap_filter);
-	}
-	else warnx("listening on %s", nids_params.device);
+        if (nids_params.pcap_filter != NULL) {
+                if (nids_params.filename == NULL) {
+                        warnx("listening on %s [%s]", nids_params.device,
+                              nids_params.pcap_filter);
+                }
+                else {
+                        warnx("using %s [%s]", nids_params.filename,
+                              nids_params.pcap_filter);
+                }
+        }
+        else {
+                if (nids_params.filename == NULL) {
+                    warnx("listening on %s", nids_params.device);
+                }
+                else {
+                    warnx("using %s", nids_params.filename);
+                }
+        }
 
 	nids_run();
 	
