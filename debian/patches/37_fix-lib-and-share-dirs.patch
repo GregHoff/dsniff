@@ -1,0 +1,34 @@
+Description: Fix directory location for data files. They were wrongly set to lib dirs.
+Author: Hank Leininger <hlein@korelogic.com>
+
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -11,12 +11,12 @@
+ install_prefix  =
+ prefix          = @prefix@
+ exec_prefix	= @exec_prefix@
+-libdir		= @libdir@
++sharedir	= $(prefix)/share/dsniff
+ sbindir         = @sbindir@
+ mandir		= @mandir@
+ 
+ CC	= @CC@
+-CFLAGS	= @CFLAGS@ -DDSNIFF_LIBDIR=\"$(libdir)/\"
++CFLAGS	= @CFLAGS@ -DDSNIFF_LIBDIR=\"$(sharedir)/\"
+ CPPFLAGS = @CPPFLAGS@
+ LDFLAGS	= @LDFLAGS@
+ 
+@@ -157,10 +157,10 @@
+ 	for file in $(PROGS); do \
+ 	   $(INSTALL_PROGRAM) -m 755 $$file $(install_prefix)$(sbindir); \
+ 	done
+-	test -d $(install_prefix)$(libdir) || \
+-	   $(INSTALL) -d $(install_prefix)$(libdir)
++	test -d $(install_prefix)$(sharedir) || \
++	   $(INSTALL) -d $(install_prefix)$(sharedir)
+ 	for file in $(CONFIGS); do \
+-	   $(INSTALL_DATA) $$file $(install_prefix)$(libdir); \
++	   $(INSTALL_DATA) $$file $(install_prefix)$(sharedir); \
+ 	done
+ 	test -d $(install_prefix)$(mandir)/man8 || \
+ 	   $(INSTALL) -d $(install_prefix)$(mandir)/man8
