@@ -74,20 +74,29 @@ pcap_init(char *intf, char *filter, int snaplen)
 		warnx("%s", ebuf);
 		return (NULL);
 	}
-	if ((pd = pcap_open_live(intf, snaplen, 1, 512, ebuf)) == NULL) {
+	//if ((pd = pcap_open_live(intf, snaplen, 1, 512, ebuf)) == NULL) {
+	if ((pd = pcap_create(intf, ebuf)) == NULL) {
 		warnx("%s", ebuf);
 		return (NULL);
 	}
 	if (pcap_lookupnet(intf, &net, &mask, ebuf) == -1) {
 		warnx("%s", ebuf);
 		return (NULL);
-	}  
+	} 
+        if (pcap_set_immediate_mode(pd, 1))
+		warnx("immediate mode not set");
+
+	if (pcap_activate(pd) < 0) {
+		perror("did not activate");
+		pcap_close(pd);
+		return (NULL);
+	}
 	if (pcap_compile(pd, &fcode, filter, 1, mask) < 0) {
 		pcap_perror(pd, "pcap_compile");
 		return (NULL);
 	}
 	if (pcap_setfilter(pd, &fcode) == -1) {
-		pcap_perror(pd, "pcap_compile");
+		pcap_perror(pd, "pcap_setfilter");
 		return (NULL);
 	}
 #ifdef BSD

@@ -53,3 +53,28 @@ dkms.conf
 
 # Quilt patches
 .pc/
+
+# make generated files
+config.*
+Makefile
+
+# RPC language generated files
+mount.c
+mount.h
+nfs_prot.c
+nfs_prot.h
+
+# generated executables
+arpspoof
+dnsspoof
+dsniff
+filesnarf
+macof
+mailsnarf
+msgsnarf
+sshmitm
+sshow
+tcpkill
+tcpnice
+urlsnarf
+webmitm
