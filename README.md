@@ -30,7 +30,7 @@ Code from Dug Song updated to work with pcap 1.9 version on Kali 2019.4
 >
 > quilt push -a
 
-### Make dnsspoof:
-> ./configure
+### Make but do not include webspy that tries to use a local Netscape browser:
+> ./configure --without-x
 >
-> make libmissing.a dnsspoof
+> make 
