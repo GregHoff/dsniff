@@ -69,12 +69,15 @@ pcap_init(char *intf, char *filter, int snaplen)
 	u_int net, mask;
 	struct bpf_program fcode;
 	char ebuf[PCAP_ERRBUF_SIZE];
+	pcap_if_t *interfaces;
 
-	if (intf == NULL && (intf = pcap_lookupdev(ebuf)) == NULL) {
-		warnx("%s", ebuf);
-		return (NULL);
+        if (intf == NULL) {
+		if (pcap_findalldevs(&interfaces, ebuf)) {
+			warnx("%s", ebuf);
+			return (NULL); }
+		else intf = interfaces->name;
 	}
-	//if ((pd = pcap_open_live(intf, snaplen, 1, 512, ebuf)) == NULL) {
+
 	if ((pd = pcap_create(intf, ebuf)) == NULL) {
 		warnx("%s", ebuf);
 		return (NULL);

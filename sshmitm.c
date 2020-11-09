@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <arpa/nameser.h>
 #include <openssl/ssl.h>
+#include <openssl/bn.h>
 #include <libnet.h>
 
 #include <err.h>
@@ -42,7 +43,7 @@ int	 mitm_fd;
 int	 client_fd, server_fd;
 SSH_CTX	*ssh_client_ctx, *ssh_server_ctx;
 SSH	*ssh_client, *ssh_server;
-struct	 sockaddr_in csin, ssin;
+struct	 sockaddr_in conn, ssin;
 int	 sig_pipe[2];
 
 static	 libnet_t *l;
@@ -130,10 +131,20 @@ mitm_init(u_short lport, u_long ip, u_short rport)
 	ssin.sin_port = htons(rport);
 	
 	SSH_init();
-	
+
+	BIGNUM *e;
+	e = BN_new();
+	BN_set_word(e, RSA_F4);
+
 	ssh_client_ctx = SSH_CTX_new();
-	ssh_client_ctx->hostkey = RSA_generate_key(1024, 35, NULL, NULL);
-	ssh_client_ctx->servkey = RSA_generate_key(768, 35, NULL, NULL);
+	ssh_client_ctx->hostkey = RSA_new();
+	ssh_client_ctx->servkey = RSA_new();
+
+	RSA_generate_key_ex(ssh_client_ctx->hostkey, 1024, e, NULL);
+	RSA_generate_key_ex(ssh_client_ctx->servkey, 768, e, NULL);
+
+	BN_free(e);
+	e = NULL;
 
 	if (ssh_client_ctx->hostkey == NULL ||
 	    ssh_client_ctx->servkey == NULL) {
@@ -151,7 +162,7 @@ mitm_child(void)
 	
 	if (Opt_debug)
 		warnx("new connection from %s.%d",
-		      inet_ntoa(csin.sin_addr), ntohs(csin.sin_port));
+		      inet_ntoa(conn.sin_addr), ntohs(conn.sin_port));
 	
 	if (fcntl(client_fd, F_SETFL, 0) == -1)
 		err(1, "fcntl");
@@ -240,10 +251,10 @@ mitm_child(void)
 				}
 				else {
 					pass_done = 1;
-					record(csin.sin_addr.s_addr,
+					record(conn.sin_addr.s_addr,
 					       ssin.sin_addr.s_addr,
 					       IPPROTO_TCP,
-					       ntohs(csin.sin_port),
+					       ntohs(conn.sin_port),
 					       ntohs(ssin.sin_port), "ssh",
 					       userpass, strlen(userpass));
 				}
@@ -329,7 +340,7 @@ mitm_run(void)
 			if (errno != EINTR)
 				err(1, "select");
 		}
-		i = sizeof(csin);
+		i = sizeof(conn);
 		
 		if (FD_ISSET(sig_pipe[0], &fds)) {
 			while (read(sig_pipe[0], buf, 1) == 1)
@@ -339,7 +350,7 @@ mitm_run(void)
 		}
 		if (FD_ISSET(mitm_fd, &fds)) {
 			client_fd = accept(mitm_fd,
-					   (struct sockaddr *)&csin, &i);
+					   (struct sockaddr *)&conn, &i);
 
 			if (client_fd >= 0) {
 				if (fork() == 0) {

@@ -60,6 +60,7 @@ main(int argc, char *argv[])
 	int c, i;
 	struct libnet_link_int *llif;
 	char pcap_ebuf[PCAP_ERRBUF_SIZE];
+	pcap_if_t *interfaces;
 	char libnet_ebuf[LIBNET_ERRBUF_SIZE];
 	u_char sha[ETHER_ADDR_LEN], tha[ETHER_ADDR_LEN];
 	in_addr_t src, dst;
@@ -101,10 +102,13 @@ main(int argc, char *argv[])
 	
 	if (argc != 0)
 		usage();
-	
-	if (!Intf && (Intf = pcap_lookupdev(pcap_ebuf)) == NULL)
-		errx(1, "%s", pcap_ebuf);
-	
+
+        if (!Intf) {
+               if (pcap_findalldevs(&interfaces, pcap_ebuf)) 
+                       errx(1, "%s", pcap_ebuf);
+               else Intf = interfaces->name;
+        }
+
 	if ((l = libnet_init(LIBNET_LINK, Intf, libnet_ebuf)) == NULL)
 		errx(1, "%s", libnet_ebuf);
 	

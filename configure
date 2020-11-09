@@ -2202,7 +2202,7 @@ EOF
 
 fi
 
-CFLAGS="$CFLAGS -D_BSD_SOURCE"
+CFLAGS="$CFLAGS -D_DEFAULT_SOURCE"
 
 if test $ac_cv_prog_gcc = yes; then
     echo $ac_n "checking whether ${CC-cc} needs -traditional""... $ac_c" 1>&6

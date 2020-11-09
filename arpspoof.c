@@ -196,6 +196,7 @@ main(int argc, char *argv[])
 	extern char *optarg;
 	extern int optind;
 	char pcap_ebuf[PCAP_ERRBUF_SIZE];
+	pcap_if_t *interfaces;
 	char libnet_ebuf[LIBNET_ERRBUF_SIZE];
 	int c;
 	int n_targets;
@@ -271,8 +272,11 @@ main(int argc, char *argv[])
 	
 	libnet_destroy(l);
 	
-	if (intf == NULL && (intf = pcap_lookupdev(pcap_ebuf)) == NULL)
-		errx(1, "%s", pcap_ebuf);
+	if (intf == NULL) {
+	       if (pcap_findalldevs(&interfaces, pcap_ebuf)) 
+		       errx(1, "%s", pcap_ebuf);
+	       else intf = interfaces->name;
+	}
 	
 	if ((l = libnet_init(LIBNET_LINK, intf, libnet_ebuf)) == NULL)
 		errx(1, "%s", libnet_ebuf);

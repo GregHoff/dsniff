@@ -168,7 +168,8 @@ main(int argc, char *argv[])
 	char libnet_ebuf[LIBNET_ERRBUF_SIZE];
 	libnet_t *l;
 	pcap_t *pd;
-	
+	pcap_if_t *interfaces;	
+
 	intf = NULL;
 	
 	while ((c = getopt(argc, argv, "i:AIMh?V")) != -1) {
@@ -190,9 +191,13 @@ main(int argc, char *argv[])
 			break;
 		}
 	}
-	if (intf == NULL && (intf = pcap_lookupdev(ebuf)) == NULL)
-		errx(1, "%s", ebuf);
-	
+
+        if (intf == NULL) {
+               if (pcap_findalldevs(&interfaces, ebuf)) 
+                       errx(1, "%s", ebuf);
+               else intf = interfaces->name;
+        }
+
 	argc -= optind;
 	argv += optind;
 	

@@ -278,6 +278,7 @@ main(int argc, char *argv[])
 	char *p, *dev, *hosts, buf[1024];
 	char ebuf[LIBNET_ERRBUF_SIZE];
 	int i;
+	pcap_if_t *interfaces;
 
 	dev = hosts = NULL;
 	
@@ -297,9 +298,12 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (dev == NULL && (dev = pcap_lookupdev(buf)) == NULL)
-		errx(1, "%s", buf);
-	
+        if (dev == NULL) {
+               if (pcap_findalldevs(&interfaces, buf)) 
+                       errx(1, "%s", buf);
+               else dev = interfaces->name;
+        }
+
 	dns_init(dev, hosts);
 	
 	if (argc > 0) {

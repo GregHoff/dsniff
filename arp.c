@@ -100,7 +100,7 @@ arp_cache_lookup(in_addr_t ip, struct ether_addr *ether, const char* lif)
 	
 	memset((char *)&ar, 0, sizeof(ar));
 #ifdef __linux__
-	strncpy(ar.arp_dev, lif, strlen(lif));
+	strncpy(ar.arp_dev, lif, sizeof(ar.arp_dev));
 #endif
 	sin = (struct sockaddr_in *)&ar.arp_pa;
 	sin->sin_family = AF_INET;

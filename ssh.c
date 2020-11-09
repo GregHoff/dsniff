@@ -89,7 +89,7 @@ static u_int crc32_tab[] = {
 static u_char	pkt[4 + 8 + SSH_MAX_PKTLEN];
 
 static void
-put_bn(BIGNUM *bn, u_char **pp)
+put_bn(const BIGNUM *bn, u_char **pp)
 {
 	short i;
 	
@@ -119,7 +119,7 @@ get_bn(BIGNUM *bn, u_char **pp, int *lenp)
 }
 
 static u_char *
-ssh_session_id(u_char *cookie, BIGNUM *hostkey_n, BIGNUM *servkey_n)
+ssh_session_id(u_char *cookie, const BIGNUM *hostkey_n, const BIGNUM *servkey_n)
 {
 	static u_char sessid[16];
 	u_int i, j;
